@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DiagnoWeb — Diabetes Risk Predictor</title>
+
+  <!-- Chart.js for drawing graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- jsPDF for high-quality PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Google Fonts — Syne (display) + Inter (body) -->
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    
+       /* CSS VARIABLES — change colors here to restyle easily */
+    :root {
+      --bg:       #060910;        /* page background */
+      --surface:  #0e1420;        /* card background */
+      --border:   rgba(255,255,255,0.06);
+      --accent:   #00d4aa;        /* teal green — main accent */
+      --accent2:  #0099ff;        /* blue — second accent */
+      --danger:   #ff4d6d;        /* red — diabetic */
+      --safe:     #00d4aa;        /* green — healthy */
+      --warn:     #ffb347;        /* orange — warning */
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --font-h:   'Syne', sans-serif;
+      --font-b:   'Inter', sans-serif;
+    }
+
+    /* Reset all default browser styles */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-b);
+      min-height: 100vh;
+    }
+
+       /* BACKGROUND GLOW EFFECT */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 50% 40% at 10% 30%, rgba(0,212,170,0.05), transparent 60%),
+        radial-gradient(ellipse 40% 35% at 90% 70%, rgba(0,153,255,0.05), transparent 60%);
+      pointer-events: none;   /* don't block clicks */
+      z-index: 0;
+    }
+
+       /* TOP NAVIGATION BAR */
+    nav {
+      position: relative; z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 40px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: var(--font-h);
+      font-size: 1.4rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    /* The green dot before the logo */
+    .logo::before {
+      content: '';
+      width: 10px; height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(1.3); }
+    }
+
+
+       /* MAIN LAYOUT — page wrapper */
+    .page {
+      position: relative; z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* Page title section */
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .hero h1 {
+      font-family: var(--font-h);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 300;
+    }
+
+       /* TWO-COLUMN GRID — Form (left) + Results (right) */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;   /* fixed left, flexible right */
+      gap: 24px;
+      align-items: start;
+    }
+    /* On small screens, stack vertically */
+    @media (max-width: 800px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+       /* CARD COMPONENT — reused everywhere */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+    }
+    .card-title {
+      font-family: var(--font-h);
+      font-size: 1rem;
+      color: #fff;
+      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    /* Colored square icon before card title */
+    .card-title .dot {
+      width: 8px; height: 8px;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+
+       /* INPUT FIELDS */
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 7px;
+    }
+    /* Wrapper to position the unit badge inside input */
+    .input-row { position: relative; }
+    input[type="number"] {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 52px 11px 14px;  /* right padding for unit badge */
+      color: var(--text);
+      font-family: var(--font-b);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+      /* Remove browser default number arrows */
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    /* Glow effect on focus */
+    input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,212,170,0.1);
+    }
+    /* Unit label inside input (e.g. "mg/dL") */
+    .unit {
+      position: absolute;
+      right: 12px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      color: var(--muted);
+      pointer-events: none;  /* don't block clicks on input */
+    }
+
+       /* RANGE SLIDER (for Diabetes Pedigree Function) */
+    .slider-row { display: flex; align-items: center; gap: 12px; }
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .slider-val {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      min-width: 36px;
+      text-align: right;
+    }
+
+       /* PREDICT BUTTON */
+    .btn-predict {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      border: none;
+      border-radius: 12px;
+      color: #000;
+      font-family: var(--font-b);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .btn-predict:hover  { opacity: 0.88; transform: translateY(-1px); }
+    .btn-predict:active { transform: scale(0.98); }
+    .btn-predict:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Loading spinner inside button */
+    .spinner {
+      display: none;
+      width: 18px; height: 18px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+       /* ERROR MESSAGE (shows when API call fails) */
+    .error-box {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: rgba(255,77,109,0.1);
+      border: 1px solid rgba(255,77,109,0.3);
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--danger);
+    }
+
+       /* RIGHT COLUMN — Results panel */
+    .right-col { display: flex; flex-direction: column; gap: 20px; }
+
+    /* ---- AWAITING STATE (shown before first prediction) ---- */
+    .awaiting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+      color: var(--muted);
+      text-align: center;
+      gap: 14px;
+    }
+    .awaiting .icon { font-size: 48px; opacity: 0.4; }
+    .awaiting p { font-size: 14px; line-height: 1.6; max-width: 260px; }
+
+    /* ---- RESULT CARD (shown after prediction) ---- */
+    #result-section { display: none; } /* hidden until first prediction */
+
+    /* Result header: big result label + risk badge */
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .result-name {
+      font-family: var(--font-h);
+      font-size: 2rem;
+    }
+    .result-name.diabetic    { color: var(--danger); }
+    .result-name.not-diabetic { color: var(--safe); }
+    .risk-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 99px;
+      letter-spacing: 0.06em;
+    }
+    .risk-badge.high     { background: rgba(255,77,109,0.15);  color: var(--danger); }
+    .risk-badge.moderate { background: rgba(255,179,71,0.15);  color: var(--warn);   }
+    .risk-badge.low      { background: rgba(0,212,170,0.15);   color: var(--safe);   }
+
+    /* ---- STAT BOXES ROW (confidence, risk score, timestamp) ---- */
+    .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat-box {
+      flex: 1;
+      min-width: 100px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .stat-value { font-size: 1.4rem; font-weight: 600; }
+
+    /* ---- RISK METER (animated progress bar) ---- */
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .meter-track {
+      height: 8px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .meter-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 1s cubic-bezier(0.22,1,0.36,1);   /* smooth animation */
+    }
+
+    /* ---- AI INSIGHTS ---- */
+    .insights-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+    .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      opacity: 0.85;
+    }
+    .insight-item:last-child { border-bottom: none; }
+
+    /* ---- CHARTS ROW ---- */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-card { padding: 20px; }
+    .chart-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px; }
+    canvas { max-height: 180px; }
+
+    /* ---- PDF DOWNLOAD BUTTON ---- */
+    .btn-pdf {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 13px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: var(--font-b);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-pdf:hover { background: rgba(255,255,255,0.04); border-color: var(--accent); }
+
+       /* HISTORY PANEL (below everything) */
+    .history-section { margin-top: 32px; }
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .history-header h2 { font-family: var(--font-h); font-size: 1.1rem; color: #fff; }
+    .btn-clear {
+      font-size: 12px;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .btn-clear:hover { color: var(--danger); border-color: var(--danger); }
+
+    /* History is a horizontal scrollable row of cards */
+    .history-scroll {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    /* Hide scrollbar (looks cleaner) */
+    .history-scroll::-webkit-scrollbar { display: none; }
+    .history-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .history-card {
+      flex-shrink: 0;
+      width: 220px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .history-card:hover { border-color: var(--accent); }
+    .history-card .h-result { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .history-card .h-conf   { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .history-card .h-time   { font-size: 11px; color: var(--muted); opacity: 0.6; }
+    .history-card .h-bar    { height: 4px; border-radius: 99px; margin-bottom: 8px; }
+
+    /* Empty history message */
+    .no-history { color: var(--muted); font-size: 14px; padding: 20px 0; }
+
+    /* Mobile responsive tweaks */
+    @media (max-width: 480px) {
+      nav { padding: 14px 16px; }
+      .page { padding: 20px 12px 60px; }
+      .hero { margin-bottom: 28px; }
+      .card { padding: 18px; }
+      .result-name { font-size: 1.6rem; }
+      .stat-value { font-size: 1.1rem; }
+    }
+
+    /* Slide-in animation for result section */
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .slide-in { animation: slideIn 0.4s cubic-bezier(0.22,1,0.36,1); }
+  </style>
+</head>
+
+<body>
+
+       <!-- NAVIGATION BAR -->
+  <nav>
+    <div class="logo">DiagnoWeb</div>
+
+  </nav>
+
+       <!-- MAIN PAGE -->
+  <div class="page">
+
+    <!-- Page Title -->
+    <div class="hero">
+      <h1>Diabetes Risk Predictor</h1>
+      <p>Enter patient vitals below — our ML model will assess diabetes risk with AI-powered insights.</p>
+    </div>
+
+    <!-- Two-column layout: Form + Results -->
+    <div class="main-grid">
+
+           <!-- LEFT: INPUT FORM -->
+      <div class="card">
+        <div class="card-title"><div class="dot"></div>Patient Vitals</div>
+
+        <!-- Each input field -->
+        <div class="field">
+          <label>Pregnancies</label>
+          <div class="input-row">
+            <input type="number" id="f-pregnancies" min="0" max="20" value="2" placeholder="0"/>
+            <span class="unit">count</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Glucose Level</label>
+          <div class="input-row">
+            <input type="number" id="f-glucose" min="0" max="300" value="120" placeholder="120"/>
+            <span class="unit">mg/dL</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Blood Pressure</label>
+          <div class="input-row">
+            <input type="number" id="f-bp" min="0" max="150" value="70" placeholder="70"/>
+            <span class="unit">mm Hg</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Skin Thickness</label>
+          <div class="input-row">
+            <input type="number" id="f-skin" min="0" max="100" value="20" placeholder="20"/>
+            <span class="unit">mm</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Insulin Level</label>
+          <div class="input-row">
+            <input type="number" id="f-insulin" min="0" max="900" value="80" placeholder="80"/>
+            <span class="unit">μU/mL</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>BMI</label>
+          <div class="input-row">
+            <input type="number" id="f-bmi" min="0" max="70" step="0.1" value="25.5" placeholder="25.5"/>
+            <span class="unit">kg/m²</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Age</label>
+          <div class="input-row">
+            <input type="number" id="f-age" min="0" max="120" value="30" placeholder="30"/>
+            <span class="unit">years</span>
+          </div>
+        </div>
+
+        <!-- Slider field for Diabetes Pedigree Function -->
+        <div class="field">
+          <label>Diabetes Pedigree Function <span style="color:var(--muted);font-size:10px">(family history score)</span></label>
+          <div class="slider-row">
+            <input type="range" id="f-dpf" min="0" max="2.5" step="0.01" value="0.5"
+              oninput="document.getElementById('dpf-display').textContent = parseFloat(this.value).toFixed(2)"/>
+            <span class="slider-val" id="dpf-display">0.50</span>
+          </div>
+        </div>
+
+        <!-- Predict Button -->
+        <button class="btn-predict" id="predict-btn" onclick="runPrediction()">
+          <span id="btn-text">Analyse Risk →</span>
+          <div class="spinner" id="spinner"></div>
+        </button>
+
+        <!-- Error message (hidden by default) -->
+        <div class="error-box" id="error-box"></div>
+      </div>
+
+           <!-- RIGHT: RESULTS PANEL -->
+      <div class="right-col">
+
+        <!-- Awaiting state (shown before first prediction) -->
+        <div class="card" id="awaiting-card">
+          <div class="awaiting">
+            <div class="icon">🧬</div>
+            <p>Enter patient vitals and click <strong>Analyse Risk</strong> to view AI-powered predictions and health insights.</p>
+          </div>
+        </div>
+
+        <!-- Result section (hidden until prediction happens) -->
+        <div id="result-section">
+
+          <!-- Main result card -->
+          <div class="card slide-in" style="margin-bottom:20px">
+            <div class="result-header">
+              <div>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.07em">Prediction Result</div>
+                <!-- Result label: "Diabetic" or "Not Diabetic" -->
+                <div class="result-name" id="result-name"></div>
+              </div>
+              <!-- Risk badge: High Risk / Moderate Risk / Low Risk -->
+              <div class="risk-badge" id="risk-badge"></div>
+            </div>
+
+            <!-- Three stat boxes: Confidence, Risk Score, Time -->
+            <div class="stats-row">
+              <div class="stat-box">
+                <div class="stat-label">Confidence</div>
+                <div class="stat-value" id="stat-conf" style="color:var(--accent)"></div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Risk Score</div>
+                <div class="stat-value" id="stat-risk"></div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Prediction</div>
+                <div class="stat-value" id="stat-outcome" style="font-size:1rem"></div>
+              </div>
+            </div>
+
+            <!-- Animated risk meter -->
+            <div class="meter-label">
+              <span>Risk Level</span>
+              <span id="meter-pct"></span>
+            </div>
+            <div class="meter-track">
+              <!-- width set by JS, color changes based on result -->
+              <div class="meter-fill" id="meter-fill" style="width:0%"></div>
+            </div>
+
+            <!-- AI Insights list -->
+            <div class="insights-title">AI Health Insights</div>
+            <div id="insights-list"></div>
+          </div>
+
+          <!-- Charts row -->
+          <div class="charts-row" style="margin-bottom:20px">
+
+            <!-- Chart 1: Radar chart showing all vitals vs normal range -->
+            <div class="card chart-card">
+              <div class="chart-title">Your Vitals vs Normal</div>
+              <canvas id="radarChart"></canvas>
+            </div>
+
+            <!-- Chart 2: Confidence donut -->
+            <div class="card chart-card">
+              <div class="chart-title">Confidence Score</div>
+              <canvas id="donutChart"></canvas>
+            </div>
+
+          </div>
+
+          <!-- Download PDF button -->
+          <button class="btn-pdf" onclick="downloadPDF()">
+            ⬇ Download Full Report (PDF)
+          </button>
+
+        </div><!-- end result-section -->
+
+      </div><!-- end right-col -->
+
+    </div><!-- end main-grid -->
+
+         <!-- HISTORY PANEL (below both columns) -->
+    <div class="history-section">
+      <div class="history-header">
+        <h2>Prediction History</h2>
+        <button class="btn-clear" onclick="clearHistory()">Clear All</button>
+      </div>
+      <!-- Horizontally scrollable history cards -->
+      <div class="history-scroll" id="history-list">
+        <div class="no-history">No predictions yet. Run your first analysis above.</div>
+      </div>
+    </div>
+
+  </div><!-- end page -->
+
+
+       <!-- JAVASCRIPT — all the logic -->
+  <script>
+
+    // ── CONFIG ──────────────────────────────────────────
+    // Change this if your FastAPI runs on a different port
+    const API_URL = "http://127.0.0.1:8000";
+
+    // ── STATE ───────────────────────────────────────────
+    // history array stores all past predictions (in memory)
+    let history = [];
+
+    // Chart.js instances (stored so we can destroy before redrawing)
+    let radarChart = null;
+    let donutChart = null;
+
+    // ── MAIN PREDICTION FUNCTION ─────────────────────────
+    async function runPrediction() {
+
+      // --- Read all input values ---
+      const fields = {
+        Pregnancies:              parseFloat(document.getElementById('f-pregnancies').value),
+        Glucose:                  parseFloat(document.getElementById('f-glucose').value),
+        BloodPressure:            parseFloat(document.getElementById('f-bp').value),
+        SkinThickness:            parseFloat(document.getElementById('f-skin').value),
+        Insulin:                  parseFloat(document.getElementById('f-insulin').value),
+        BMI:                      parseFloat(document.getElementById('f-bmi').value),
+        DiabetesPedigreeFunction: parseFloat(document.getElementById('f-dpf').value),
+        Age:                      parseFloat(document.getElementById('f-age').value),
+      };
+
+      // --- Validate: check if any field is empty or negative ---
+      for (const [key, val] of Object.entries(fields)) {
+        if (isNaN(val) || val < 0) {
+          showError(`Please enter a valid value for "${key.replace(/([A-Z])/g,' $1').trim()}"`);
+          return;
+        }
+      }
+
+      // --- Show loading state ---
+      setLoading(true);
+      hideError();
+
+      try {
+        // --- Call FastAPI backend ---
+        // fetch() sends an HTTP request to our API
+        const response = await fetch(`${API_URL}/predict`, {
+          method: 'POST',                         // POST = sending data
+          headers: { 'Content-Type': 'application/json' },  // tell server we're sending JSON
+          body: JSON.stringify(fields)            // convert JS object to JSON string
+        });
+
+        // If server returned an error status, throw an error
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || 'Server error');
+        }
+
+        // Parse the JSON response back into a JS object
+        const data = await response.json();
+
+        // --- Show results ---
+        displayResult(data, fields);
+
+        // --- Add to history ---
+        addToHistory(data, fields);
+
+      } catch (err) {
+        // If fetch fails (e.g. server not running), show friendly message
+        if (err.message.includes('fetch') || err.message.includes('Failed')) {
+          showError('Cannot connect to the API. Make sure FastAPI is running: uvicorn main:app --reload');
+        } else {
+          showError(err.message);
+        }
+      } finally {
+        // Always remove loading state, even if error happened
+        setLoading(false);
+      }
+    }
+
+    // ── DISPLAY RESULT ───────────────────────────────────
+    function displayResult(data, fields) {
+
+      // Show result section, hide awaiting card
+      document.getElementById('awaiting-card').style.display = 'none';
+      document.getElementById('result-section').style.display = 'block';
+
+      const isDiabetic = data.prediction === 1;
+      const color      = isDiabetic ? 'var(--danger)' : 'var(--safe)';
+
+      // Set result name text and color class
+      const nameEl = document.getElementById('result-name');
+      nameEl.textContent = data.result;
+      nameEl.className   = `result-name ${isDiabetic ? 'diabetic' : 'not-diabetic'}`;
+
+      // Set risk badge text and class
+      const badge = document.getElementById('risk-badge');
+      badge.textContent = data.risk_level;
+      badge.className   = `risk-badge ${
+        data.risk_level.includes('High')     ? 'high'     :
+        data.risk_level.includes('Moderate') ? 'moderate' : 'low'
+      }`;
+
+      // Set stat box values
+      document.getElementById('stat-conf').textContent    = data.confidence + '%';
+      document.getElementById('stat-risk').textContent    = data.risk_score + '/100';
+      document.getElementById('stat-outcome').textContent = data.prediction === 1 ? '🔴 Positive' : '🟢 Negative';
+      document.getElementById('stat-outcome').style.color = color;
+
+      // Animate the risk meter bar
+      const fill = document.getElementById('meter-fill');
+      document.getElementById('meter-pct').textContent = data.risk_score + '/100';
+      fill.style.background = isDiabetic
+        ? 'linear-gradient(90deg, #ff4d6d, #ff8c6d)'
+        : 'linear-gradient(90deg, #00d4aa, #00b4d8)';
+      // Small delay so CSS transition animates from 0 → value
+      setTimeout(() => { fill.style.width = data.risk_score + '%'; }, 50);
+
+      // Build insights list HTML
+      const insightsList = document.getElementById('insights-list');
+      insightsList.innerHTML = data.insights.map(tip =>
+        `<div class="insight-item">${tip}</div>`
+      ).join('');
+
+      // Draw charts
+      drawRadarChart(fields);
+      drawDonutChart(data.confidence, isDiabetic);
+    }
+
+    // ── RADAR CHART — Vitals vs Normal Range ─────────────
+    function drawRadarChart(fields) {
+      // Destroy previous chart if exists (prevents memory leak)
+      if (radarChart) radarChart.destroy();
+
+      // Normalize each field to 0–100 scale for display
+      const normalizeMap = {
+        Glucose:       { val: fields.Glucose,       max: 200, normal: 60  },
+        BMI:           { val: fields.BMI,            max: 50,  normal: 52  },
+        BloodPressure: { val: fields.BloodPressure,  max: 130, normal: 55  },
+        Insulin:       { val: fields.Insulin,        max: 300, normal: 27  },
+        Age:           { val: fields.Age,            max: 80,  normal: 38  },
+        Pregnancies:   { val: fields.Pregnancies,    max: 15,  normal: 27  },
+      };
+
+      const labels  = Object.keys(normalizeMap);
+      const patient = labels.map(k => Math.round((normalizeMap[k].val / normalizeMap[k].max) * 100));
+      const normal  = labels.map(k => normalizeMap[k].normal);
+
+      const ctx = document.getElementById('radarChart').getContext('2d');
+      radarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Patient',
+              data: patient,
+              backgroundColor: 'rgba(0,212,170,0.15)',
+              borderColor: '#00d4aa',
+              pointBackgroundColor: '#00d4aa',
+              borderWidth: 2,
+            },
+            {
+              label: 'Normal Avg',
+              data: normal,
+              backgroundColor: 'rgba(100,116,139,0.1)',
+              borderColor: 'rgba(100,116,139,0.5)',
+              pointBackgroundColor: '#64748b',
+              borderWidth: 1,
+              borderDash: [4, 4],
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+          scales: {
+            r: {
+              ticks:      { color: '#64748b', backdropColor: 'transparent', font: { size: 10 } },
+              grid:       { color: 'rgba(255,255,255,0.05)' },
+              pointLabels:{ color: '#94a3b8', font: { size: 11 } },
+              angleLines: { color: 'rgba(255,255,255,0.05)' },
+            }
+          }
+        }
+      });
+    }
+
+    // ── DONUT CHART — Confidence ──────────────────────────
+    function drawDonutChart(confidence, isDiabetic) {
+      if (donutChart) donutChart.destroy();
+
+      const color = isDiabetic ? '#ff4d6d' : '#00d4aa';
+      const ctx   = document.getElementById('donutChart').getContext('2d');
+      donutChart  = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: [confidence, 100 - confidence],
+            backgroundColor: [color, 'rgba(255,255,255,0.05)'],
+            borderWidth: 0,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          cutout: '72%',   // how thick the ring is
+          plugins: {
+            legend: { display: false },
+            // Custom plugin: draw confidence % text in center of donut
+            tooltip: { enabled: false },
+          }
+        },
+        plugins: [{
+          id: 'centerText',
+          beforeDraw(chart) {
+            const { width, height, ctx } = chart;
+            ctx.save();
+            ctx.font = '700 22px Syne, sans-serif';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(confidence + '%', width / 2, height / 2);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    // ── HISTORY FUNCTIONS ────────────────────────────────
+    function addToHistory(data, fields) {
+      // Add new prediction to the front of the array
+      history.unshift({ data, fields, id: Date.now() });
+
+      // Keep only last 10 predictions
+      if (history.length > 10) history.pop();
+
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-list');
+
+      if (history.length === 0) {
+        container.innerHTML = '<div class="no-history">No predictions yet.</div>';
+        return;
+      }
+
+      // Build a card for each history entry
+      container.innerHTML = history.map(entry => {
+        const isDiabetic = entry.data.prediction === 1;
+        const color      = isDiabetic ? 'var(--danger)' : 'var(--safe)';
+        return `
+          <div class="history-card" onclick="reloadHistory(${entry.id})">
+            <div class="h-bar" style="background:${color}; opacity:0.6"></div>
+            <div class="h-result" style="color:${color}">${entry.data.result}</div>
+            <div class="h-conf">Confidence: ${entry.data.confidence}%  |  Risk: ${entry.data.risk_score}/100</div>
+            <div class="h-time">${entry.data.timestamp}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Clicking a history card reloads that result
+    function reloadHistory(id) {
+      const entry = history.find(h => h.id === id);
+      if (entry) displayResult(entry.data, entry.fields);
+    }
+
+    function clearHistory() {
+      history = [];
+      renderHistory();
+    }
+
+    // ── PDF DOWNLOAD ─────────────────────────────────────
+    // Uses jsPDF to draw the report natively — much higher quality than html2pdf screenshot approach
+    function downloadPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const W = 210, margin = 18;
+      let y = 0;
+
+      // Grab last result from DOM
+      const resultName  = document.getElementById('result-name').textContent;
+      const riskBadge   = document.getElementById('risk-badge').textContent;
+      const confidence  = document.getElementById('stat-conf').textContent;
+      const riskScore   = document.getElementById('stat-risk').textContent;
+      const outcome     = document.getElementById('stat-outcome').textContent;
+      const isDiabetic  = resultName === 'Diabetic';
+      const accentColor = isDiabetic ? [255, 77, 109] : [0, 212, 170];
+      const badgeColor  = riskBadge.includes('High')     ? [255,77,109]  :
+                          riskBadge.includes('Moderate') ? [255,179,71]  : [0,212,170];
+      const riskNum     = parseInt(riskScore);  // e.g. "42/100" → 42
+
+      // ── HEADER BAR ──────────────────────────────────────
+      doc.setFillColor(14, 20, 32);
+      doc.rect(0, 0, W, 42, 'F');
+
+      // Logo dot
+      doc.setFillColor(...accentColor);
+      doc.circle(margin + 3, 20, 3, 'F');
+
+      // App name
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(255, 255, 255);
+      doc.text('DiagnoWeb', margin + 10, 22);
+
+      // Subtitle
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Diabetes Risk Prediction Report', margin + 10, 30);
+
+      // Timestamp (top right)
+      const timestamp = document.querySelector('.h-time') ?
+        document.querySelector('.history-card .h-time')?.textContent || new Date().toLocaleString() :
+        new Date().toLocaleString();
+      doc.setFontSize(8);
+      doc.text(timestamp, W - margin, 30, { align: 'right' });
+
+      y = 55;
+
+      // ── RESULT BADGE AREA ────────────────────────────────
+      doc.setFillColor(14, 20, 32);
+      doc.roundedRect(margin, y, W - margin * 2, 28, 4, 4, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(100, 116, 139);
+      doc.text('PREDICTION RESULT', margin + 8, y + 10);
+
+      doc.setFontSize(22);
+      doc.setTextColor(...accentColor);
+      doc.text(resultName, margin + 8, y + 22);
+
+      // Risk badge pill (right side)
+      const badgeX = W - margin - 40;
+      doc.setFillColor(badgeColor[0], badgeColor[1], badgeColor[2]);
+      doc.roundedRect(badgeX, y + 9, 36, 10, 3, 3, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(14, 20, 32);
+      doc.text(riskBadge, badgeX + 18, y + 15.5, { align: 'center' });
+
+      y += 38;
+
+      // ── STATS ROW ────────────────────────────────────────
+      const boxW = (W - margin * 2 - 8) / 3;
+      const statsData = [
+        { label: 'CONFIDENCE', value: confidence,  color: accentColor },
+        { label: 'RISK SCORE', value: riskScore,   color: [226,232,240] },
+        { label: 'OUTCOME',    value: outcome.replace(/🔴|🟢/g,'').trim(), color: accentColor },
+      ];
+      statsData.forEach((s, i) => {
+        const bx = margin + i * (boxW + 4);
+        doc.setFillColor(14, 20, 32);
+        doc.roundedRect(bx, y, boxW, 22, 3, 3, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(s.label, bx + boxW / 2, y + 7, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(...s.color);
+        doc.text(s.value, bx + boxW / 2, y + 17, { align: 'center' });
+      });
+
+      y += 30;
+
+      // ── RISK METER BAR ────────────────────────────────────
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('RISK LEVEL', margin, y);
+      doc.text(riskScore, W - margin, y, { align: 'right' });
+      y += 4;
+
+      // Track background
+      doc.setFillColor(30, 40, 55);
+      doc.roundedRect(margin, y, W - margin * 2, 5, 2, 2, 'F');
+      // Filled portion
+      const fillW = ((W - margin * 2) * riskNum) / 100;
+      doc.setFillColor(...accentColor);
+      if (fillW > 0) doc.roundedRect(margin, y, fillW, 5, 2, 2, 'F');
+
+      y += 14;
+
+      // ── VITALS TABLE ──────────────────────────────────────
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Patient Vitals', margin, y);
+      y += 6;
+
+      const vitalsLabels = ['Pregnancies','Glucose Level','Blood Pressure','Skin Thickness','Insulin Level','BMI','Pedigree Fn','Age'];
+      const vitalsIds    = ['f-pregnancies','f-glucose','f-bp','f-skin','f-insulin','f-bmi','f-dpf','f-age'];
+      const vitalsUnits  = ['count','mg/dL','mm Hg','mm','μU/mL','kg/m²','score','years'];
+
+      const colW = (W - margin * 2) / 2 - 2;
+      vitalsLabels.forEach((label, i) => {
+        const col = i % 2;
+        if (col === 0 && i > 0) y += 11;
+        const bx  = margin + col * (colW + 4);
+        const val = document.getElementById(vitalsIds[i])?.value || '—';
+
+        doc.setFillColor(14, 20, 32);
+        doc.roundedRect(bx, y, colW, 9, 2, 2, 'F');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(label, bx + 4, y + 6);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(226, 232, 240);
+        doc.text(`${val} ${vitalsUnits[i]}`, bx + colW - 4, y + 6, { align: 'right' });
+      });
+
+      y += 20;
+
+      // ── AI INSIGHTS ───────────────────────────────────────
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text('AI Health Insights', margin, y);
+      y += 6;
+
+      // Get insights from DOM, strip emojis for clean rendering
+      const insightEls = document.querySelectorAll('#insights-list .insight-item');
+      insightEls.forEach(el => {
+        const tip = el.textContent.replace(/[\u{1F300}-\u{1FFFF}]|[\u2600-\u27BF]/gu, '').trim();
+        const lines = doc.splitTextToSize(tip, W - margin * 2 - 12);
+        const bh    = lines.length * 5.5 + 7;
+
+        // Check page overflow
+        if (y + bh > 275) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFillColor(14, 20, 32);
+        doc.roundedRect(margin, y, W - margin * 2, bh, 3, 3, 'F');
+
+        // Accent left border
+        doc.setFillColor(...accentColor);
+        doc.roundedRect(margin, y, 3, bh, 1, 1, 'F');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(200, 212, 226);
+        doc.text(lines, margin + 7, y + 6);
+        y += bh + 3;
+      });
+
+      // ── FOOTER ────────────────────────────────────────────
+      const pageCount = doc.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setFillColor(14, 20, 32);
+        doc.rect(0, 285, W, 12, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text('DiagnoWeb — For educational purposes only. Not a substitute for medical advice.', W / 2, 291, { align: 'center' });
+      }
+
+      doc.save('DiagnoAI_Report.pdf');
+    }
+
+    // ── UI HELPERS ───────────────────────────────────────
+    function setLoading(isLoading) {
+      const btn     = document.getElementById('predict-btn');
+      const spinner = document.getElementById('spinner');
+      const btnText = document.getElementById('btn-text');
+      btn.disabled          = isLoading;
+      spinner.style.display = isLoading ? 'block' : 'none';
+      btnText.style.display = isLoading ? 'none'  : 'block';
+    }
+
+    function showError(msg) {
+      const el      = document.getElementById('error-box');
+      el.textContent = '⚠️ ' + msg;
+      el.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error-box').style.display = 'none';
+    }
+
+  </script>
+</body>
+</html>
