@@ -715,8 +715,9 @@
       } catch (err) {
         // If fetch fails (e.g. server not running), show friendly message
         if (err.message.includes('fetch') || err.message.includes('Failed')) {
-          showError('Cannot connect to the API. Make sure FastAPI is running: uvicorn main:app --reload');
-        } else {
+          showError('Server is starting up. Please wait a few seconds and try again.');
+        } 
+        else {
           showError(err.message);
         }
       } finally {
