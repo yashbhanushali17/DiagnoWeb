@@ -165,7 +165,7 @@ def root():
 
 
 # GET /health → used by frontend to check if backend is alive
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "ok", "model_loaded": True}
 
